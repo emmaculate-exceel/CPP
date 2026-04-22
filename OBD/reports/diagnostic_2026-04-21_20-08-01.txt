@@ -1,0 +1,36 @@
+Vehicle Diagnostic Report
+Generated: 2026-04-21 20:08:01
+Mode: Simulation
+========================================================
+
+VIN: 1G1JC5444R72212345
+
+LIVE SENSOR SNAPSHOT
+----------------------------------------
+Engine RPM                       1160.00  RPM
+Vehicle Speed                      99.00  km/h
+Coolant Temperature               103.00  °C
+Throttle Position                  68.24  %
+Engine Load                        23.53  %
+Fuel Pressure                     105.00  kPa
+Intake Air Temperature             42.00  °C
+MAF Air Flow Rate                  12.22  g/s
+Battery Voltage                    13.51  V
+Fuel Level                         32.94  %
+Barometric Pressure               100.00  kPa
+Short Term Fuel Trim B1             1.56  %
+Long Term Fuel Trim B1             -2.34  %
+O2 Voltage (B1 S1)                  0.72  V
+
+DIAGNOSTIC TROUBLE CODES
+----------------------------------------
+No fault codes found. System OK.
+
+FREEZE FRAME (DTC: P0300)
+----------------------------------------
+Engine RPM                       1726.00  RPM
+Vehicle Speed                      69.00  km/h
+Coolant Temperature                65.00  °C
+Throttle Position                  31.37  %
+Engine Load                        50.20  %
+Fuel Level                         49.80  %
