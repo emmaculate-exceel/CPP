@@ -3,6 +3,7 @@
 #include <termios.h>
 #include <unistd.h>
 #include <chrono>
+#include <iomanip>
 #include <thread>
 #include <iostream>
 
@@ -139,4 +140,82 @@ void SerialPort::disconnect() {
         fd = -1;
     }
     connected = false;
+}
+
+bool SerialPort::probe() {
+    if (access(portPath.c_str(), F_OK | R_OK | W_OK) != 0)
+        return false;
+
+    int testFd = open(portPath.c_str(), O_RDWR | O_NOCTTY | O_NDELAY);
+    if (testFd < 0) return false;
+    fcntl(testFd, F_SETFL, 0);
+
+    // Use instance baud rate — supports 9600, 38400, 115200
+    speed_t speed = B38400;
+    if (baudRate == 9600)   speed = B9600;
+    if (baudRate == 115200) speed = B115200;
+
+    struct termios opts = {};
+    tcgetattr(testFd, &opts);
+    cfsetispeed(&opts, speed);
+    cfsetospeed(&opts, speed);
+    opts.c_cflag  = CS8 | CLOCAL | CREAD;
+    opts.c_lflag  = 0;
+    opts.c_iflag  = 0;
+    opts.c_oflag  = 0;
+    opts.c_cc[VMIN]  = 0;
+    opts.c_cc[VTIME] = 3; // Fix 1: 300ms timeout (was 2 seconds)
+    tcsetattr(testFd, TCSANOW, &opts);
+    tcflush(testFd, TCIFLUSH);
+
+    const char* cmd = "ATI\r";
+    write(testFd, cmd, 4);
+
+    char buf[128] = {};
+    int  total    = 0;
+    auto start    = std::chrono::steady_clock::now();
+
+    while (total < 127) {
+        int n = read(testFd, buf + total, 127 - total);
+        if (n > 0) {
+            total += n;
+            if (buf[total - 1] == '>') break;
+        }
+        // Fix 1: 300ms cutoff (was 2 seconds) — unresponsive port moves on fast
+        if (std::chrono::steady_clock::now() - start > std::chrono::milliseconds(300))
+            break;
+    }
+
+    close(testFd);
+    std::string resp(buf, total);
+    return resp.find("ELM") != std::string::npos ||
+           resp.find("elm") != std::string::npos;
+}
+
+// Fix 1 + Fix 3: scans 7 ports × 3 baud rates, worst case ~6s (was ~14s)
+std::pair<std::string, int> SerialPort::autoDetect() {
+    static const std::vector<std::string> PORTS = {
+        "/dev/rfcomm0",  // Bluetooth ELM327
+        "/dev/rfcomm1",
+        "/dev/ttyUSB0",  // USB ELM327
+        "/dev/ttyUSB1",
+        "/dev/ttyUSB2",
+        "/dev/ttyACM0",  // Some USB adapters
+        "/dev/ttyACM1",
+    };
+    // Fix 3: try common baud rates — cheap clones often differ from default
+    static const std::vector<int> BAUDS = {38400, 9600, 115200};
+
+    for (const auto& port : PORTS) {
+        std::cout << "    Trying " << std::left << std::setw(18) << port << " ... " << std::flush;
+        for (int baud : BAUDS) {
+            SerialPort sp(port, baud);
+            if (sp.probe()) {
+                std::cout << "detected! (" << baud << " baud)\n";
+                return {port, baud};
+            }
+        }
+        std::cout << "no response\n";
+    }
+    return {"", 0};
 }
