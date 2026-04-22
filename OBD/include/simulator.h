@@ -1,17 +1,16 @@
 #pragma once
-#include "obd2.h"
+#include "obd_interface.h"
 #include <string>
 #include <vector>
 
-// Simulates an ELM327 adapter + vehicle ECU
-class VehicleSimulator {
+class VehicleSimulator : public OBDInterface {
 public:
     VehicleSimulator();
 
-    // Send an OBD-II command, get raw hex response back
-    std::string sendCommand(const std::string& command);
+    std::string sendCommand(const std::string& command) override;
+    bool isConnected() const override { return true; }
+    void injectDTC(const std::string& code) override { addDTC(code); }
 
-    // Inject a DTC into the simulated ECU
     void addDTC(const std::string& code);
     void clearDTCs();
 

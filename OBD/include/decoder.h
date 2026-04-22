@@ -1,17 +1,23 @@
 #pragma once
 #include "obd2.h"
 #include <cstdint>
+#include <map>
 #include <string>
 #include <vector>
 
-// Decodes raw OBD-II hex responses into human-readable values
 class OBDDecoder {
 public:
-    SensorData decodeLiveData(int pid, const std::string& rawResponse);
+    OBDDecoder();
+
+    void loadDTCDatabase(const std::string& csvPath);
+
+    SensorData       decodeLiveData(int pid, const std::string& rawResponse);
     std::vector<DTC> decodeDTCs(const std::string& rawResponse);
-    FreezeFrame decodeFreezeFrame(const std::string& rawResponse);
-    std::string decodeVIN(const std::string& rawResponse);
+    std::string      decodeVIN(const std::string& rawResponse);
 
 private:
+    std::map<std::string, std::pair<std::string, Severity>> dtcDatabase;
+
     std::string dtcBytesToCode(uint8_t a, uint8_t b);
+    void        loadBuiltinDTCs();
 };

@@ -3,7 +3,6 @@
 #include <vector>
 #include <map>
 
-// OBD-II Service Modes
 enum class OBDService {
     LIVE_DATA       = 0x01,
     FREEZE_FRAME    = 0x02,
@@ -12,7 +11,6 @@ enum class OBDService {
     VEHICLE_INFO    = 0x09
 };
 
-// OBD-II PIDs (Parameter IDs) for Service 01
 enum class PID {
     ENGINE_RPM          = 0x0C,
     VEHICLE_SPEED       = 0x0D,
@@ -22,23 +20,34 @@ enum class PID {
     FUEL_PRESSURE       = 0x0A,
     INTAKE_AIR_TEMP     = 0x0F,
     MAF_SENSOR          = 0x10,
-    OXYGEN_SENSOR       = 0x14,
     BATTERY_VOLTAGE     = 0x42,
-    VIN                 = 0x02   // used with service 09
+    FUEL_LEVEL          = 0x2F,
+    BARO_PRESSURE       = 0x33,
+    SHORT_FUEL_TRIM_B1  = 0x06,
+    LONG_FUEL_TRIM_B1   = 0x07,
+    O2_VOLTAGE_B1S1     = 0x14,
+    VIN                 = 0x02
+};
+
+enum class Severity {
+    INFO,
+    WARNING,
+    CRITICAL
 };
 
 struct SensorData {
     std::string name;
-    double value;
+    double      value;
     std::string unit;
 };
 
 struct DTC {
-    std::string code;       // e.g. "P0300"
+    std::string code;
     std::string description;
+    Severity    severity;
 };
 
 struct FreezeFrame {
-    std::string dtc;
+    std::string          dtc;
     std::vector<SensorData> sensors;
 };
