@@ -2,19 +2,25 @@
 #include <sstream>
 #include <iomanip>
 #include <cstdint>
-#include <cstdlib>
-#include <ctime>
+#include <random>
 #include <algorithm>
 
+static std::mt19937& rng() {
+    static std::mt19937 gen(std::random_device{}());
+    return gen;
+}
+
+static int randInt(int lo, int hi) {
+    return std::uniform_int_distribution<int>(lo, hi)(rng());
+}
+
 VehicleSimulator::VehicleSimulator() {
-    std::srand(static_cast<unsigned>(std::time(nullptr)));
-    // Pre-load a couple of DTCs for demo
     activeDTCs.push_back("P0300");
     activeDTCs.push_back("P0171");
 }
 
 std::string VehicleSimulator::sendCommand(const std::string& command) {
-    if (command == "ATZ" || command == "ATE0" || command == "ATL0")
+    if (command == "ATZ" || command == "ATE0" || command == "ATL0" || command == "ATSP0")
         return "OK";
 
     if (command.size() < 4)
@@ -37,44 +43,57 @@ std::string VehicleSimulator::handleLiveData(int pid) {
     std::ostringstream oss;
     oss << "41 " << std::uppercase << std::hex << std::setw(2) << std::setfill('0') << pid << " ";
 
-    int r = std::rand();
-
     switch (pid) {
-        case 0x0C: { // RPM: formula = (A*256+B)/4, range 800-4000
-            int rpm = 800 + (r % 3200);
-            int raw = rpm * 4;
+        case 0x0C: { // RPM: (A*256+B)/4
+            int raw = randInt(800, 4000) * 4;
             oss << std::setw(2) << std::setfill('0') << ((raw >> 8) & 0xFF) << " "
                 << std::setw(2) << std::setfill('0') << (raw & 0xFF);
             break;
         }
-        case 0x0D: // Speed: A km/h, range 0-120
-            oss << std::setw(2) << std::setfill('0') << (r % 121);
+        case 0x0D: // Speed km/h
+            oss << std::setw(2) << std::setfill('0') << randInt(0, 120);
             break;
-        case 0x05: // Coolant temp: A-40, range 75-105°C
-            oss << std::setw(2) << std::setfill('0') << (75 + (r % 31) + 40);
+        case 0x05: // Coolant temp: A-40
+            oss << std::setw(2) << std::setfill('0') << (randInt(75, 105) + 40);
             break;
-        case 0x11: // Throttle: A*100/255 %, range 10-80
-            oss << std::setw(2) << std::setfill('0') << (26 + (r % 178));
+        case 0x11: // Throttle: A*100/255
+            oss << std::setw(2) << std::setfill('0') << randInt(26, 204);
             break;
-        case 0x04: // Engine load: A*100/255 %
-            oss << std::setw(2) << std::setfill('0') << (r % 256);
+        case 0x04: // Engine load: A*100/255
+            oss << std::setw(2) << std::setfill('0') << randInt(0, 255);
             break;
         case 0x0A: // Fuel pressure: A*3 kPa
-            oss << std::setw(2) << std::setfill('0') << (10 + (r % 90));
+            oss << std::setw(2) << std::setfill('0') << randInt(10, 100);
             break;
         case 0x0F: // Intake air temp: A-40
-            oss << std::setw(2) << std::setfill('0') << (25 + (r % 20) + 40);
+            oss << std::setw(2) << std::setfill('0') << (randInt(10, 45) + 40);
             break;
         case 0x10: { // MAF: (A*256+B)/100 g/s
-            int maf = 100 + (r % 1900);
+            int maf = randInt(100, 2000);
             oss << std::setw(2) << std::setfill('0') << ((maf >> 8) & 0xFF) << " "
                 << std::setw(2) << std::setfill('0') << (maf & 0xFF);
             break;
         }
         case 0x42: { // Battery voltage: (A*256+B)/1000 V
-            int mv = 13000 + (r % 1500);
+            int mv = randInt(13000, 14500);
             oss << std::setw(2) << std::setfill('0') << ((mv >> 8) & 0xFF) << " "
                 << std::setw(2) << std::setfill('0') << (mv & 0xFF);
+            break;
+        }
+        case 0x2F: // Fuel level: A*100/255
+            oss << std::setw(2) << std::setfill('0') << randInt(50, 200);
+            break;
+        case 0x33: // Barometric pressure: A kPa
+            oss << std::setw(2) << std::setfill('0') << randInt(99, 103);
+            break;
+        case 0x06: // Short term fuel trim: (A-128)*100/128
+            oss << std::setw(2) << std::setfill('0') << randInt(118, 138);
+            break;
+        case 0x07: // Long term fuel trim
+            oss << std::setw(2) << std::setfill('0') << randInt(115, 141);
+            break;
+        case 0x14: { // O2 sensor: A/200 V
+            oss << std::setw(2) << std::setfill('0') << randInt(40, 200) << " FF";
             break;
         }
         default:
@@ -84,15 +103,15 @@ std::string VehicleSimulator::handleLiveData(int pid) {
 }
 
 std::string VehicleSimulator::handleFreezeFrame(int pid) {
-    // Freeze frame uses same encoding as live data, but at a fixed snapshot
     std::ostringstream oss;
     oss << "42 " << std::uppercase << std::hex << std::setw(2) << std::setfill('0') << pid << " ";
-
     switch (pid) {
-        case 0x0C: oss << "1A F8"; break; // ~1726 RPM
-        case 0x0D: oss << "45";    break; // 69 km/h
-        case 0x05: oss << "69";    break; // 65°C
-        case 0x11: oss << "50";    break; // ~31% throttle
+        case 0x0C: oss << "1A F8"; break;  // 1726 RPM
+        case 0x0D: oss << "45";    break;  // 69 km/h
+        case 0x05: oss << "69";    break;  // 65 °C
+        case 0x11: oss << "50";    break;  // ~31% throttle
+        case 0x04: oss << "80";    break;  // ~50% load
+        case 0x2F: oss << "7F";    break;  // ~50% fuel
         default:   return "NO DATA";
     }
     return oss.str();
@@ -100,17 +119,17 @@ std::string VehicleSimulator::handleFreezeFrame(int pid) {
 
 std::string VehicleSimulator::handleReadDTCs() {
     if (activeDTCs.empty())
-        return "43 00";
+        return "43 00 00";
 
     std::ostringstream oss;
     oss << "43";
 
     for (const auto& code : activeDTCs) {
         char type = code[0];
-        int num  = std::stoi(code.substr(1), nullptr, 16);
-        int high = (num >> 8) & 0x3F;
-        int b    = num & 0xFF;
-        int a    = 0;
+        int num   = std::stoi(code.substr(1), nullptr, 16);
+        int high  = (num >> 8) & 0x3F;
+        int b     = num & 0xFF;
+        int a     = 0;
 
         switch (type) {
             case 'P': a = high;        break;
@@ -126,8 +145,9 @@ std::string VehicleSimulator::handleReadDTCs() {
 }
 
 std::string VehicleSimulator::handleVehicleInfo(int pid) {
-    if (pid == 0x02) // VIN
-        return "49 02 01 31 47 31 4A 43 35 34 34 34 52 37 32 32 31 32 33 34 35";
+    if (pid == 0x02)
+        // 17-char VIN: 1G1JC5444R7221234
+        return "49 02 01 31 47 31 4A 43 35 34 34 34 52 37 32 32 31 32 33 34";
     return "NO DATA";
 }
 
