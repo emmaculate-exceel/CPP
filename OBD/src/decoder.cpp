@@ -2,9 +2,71 @@
 #include <sstream>
 #include <iomanip>
 #include <cstdint>
+#include <fstream>
 #include <map>
 #include <vector>
-#include <stdexcept>
+
+OBDDecoder::OBDDecoder() {
+    loadBuiltinDTCs();
+}
+
+void OBDDecoder::loadBuiltinDTCs() {
+    dtcDatabase = {
+        {"P0100", {"Mass Air Flow Circuit Malfunction",                    Severity::WARNING}},
+        {"P0115", {"Engine Coolant Temperature Circuit Malfunction",        Severity::WARNING}},
+        {"P0117", {"Engine Coolant Temperature Circuit Low Input",          Severity::CRITICAL}},
+        {"P0118", {"Engine Coolant Temperature Circuit High Input",         Severity::CRITICAL}},
+        {"P0120", {"Throttle Position Sensor Circuit Malfunction",          Severity::WARNING}},
+        {"P0130", {"O2 Sensor Circuit Malfunction (Bank 1, Sensor 1)",      Severity::WARNING}},
+        {"P0171", {"System Too Lean (Bank 1)",                              Severity::WARNING}},
+        {"P0172", {"System Too Rich (Bank 1)",                              Severity::WARNING}},
+        {"P0217", {"Engine Coolant Over Temperature Condition",             Severity::CRITICAL}},
+        {"P0300", {"Random/Multiple Cylinder Misfire Detected",             Severity::CRITICAL}},
+        {"P0301", {"Cylinder 1 Misfire Detected",                           Severity::CRITICAL}},
+        {"P0302", {"Cylinder 2 Misfire Detected",                           Severity::CRITICAL}},
+        {"P0303", {"Cylinder 3 Misfire Detected",                           Severity::CRITICAL}},
+        {"P0304", {"Cylinder 4 Misfire Detected",                           Severity::CRITICAL}},
+        {"P0335", {"Crankshaft Position Sensor Circuit Malfunction",        Severity::CRITICAL}},
+        {"P0340", {"Camshaft Position Sensor Circuit Malfunction",          Severity::CRITICAL}},
+        {"P0400", {"Exhaust Gas Recirculation Flow Malfunction",            Severity::WARNING}},
+        {"P0420", {"Catalyst System Efficiency Below Threshold",            Severity::WARNING}},
+        {"P0440", {"Evaporative Emission Control System Malfunction",       Severity::WARNING}},
+        {"P0442", {"Evaporative Emission System Leak (Small)",              Severity::INFO}},
+        {"P0500", {"Vehicle Speed Sensor Malfunction",                      Severity::WARNING}},
+        {"P0505", {"Idle Control System Malfunction",                       Severity::WARNING}},
+        {"P0520", {"Engine Oil Pressure Sensor Malfunction",                Severity::CRITICAL}},
+        {"P0524", {"Engine Oil Pressure Too Low",                           Severity::CRITICAL}},
+        {"P0600", {"Serial Communication Link Malfunction",                 Severity::CRITICAL}},
+        {"P0700", {"Transmission Control System Malfunction",               Severity::WARNING}},
+    };
+}
+
+void OBDDecoder::loadDTCDatabase(const std::string& csvPath) {
+    std::ifstream file(csvPath);
+    if (!file.is_open())
+        return;
+
+    std::string line;
+    int loaded = 0;
+    while (std::getline(file, line)) {
+        if (line.empty() || line[0] == '#') continue;
+
+        std::istringstream ss(line);
+        std::string code, sevStr, desc;
+        if (!std::getline(ss, code, ','))   continue;
+        if (!std::getline(ss, sevStr, ',')) continue;
+        if (!std::getline(ss, desc))        continue;
+
+        Severity sev = Severity::INFO;
+        if (sevStr == "WARNING")  sev = Severity::WARNING;
+        if (sevStr == "CRITICAL") sev = Severity::CRITICAL;
+
+        dtcDatabase[code] = {desc, sev};
+        ++loaded;
+    }
+    if (loaded == 0)
+        loadBuiltinDTCs();
+}
 
 static std::vector<int> parseHexBytes(const std::string& response) {
     std::vector<int> bytes;
@@ -43,7 +105,7 @@ SensorData OBDDecoder::decodeLiveData(int pid, const std::string& raw) {
         case 0x05:
             data.name  = "Coolant Temperature";
             data.value = A - 40;
-            data.unit  = "°C";
+            data.unit  = "C";
             break;
         case 0x11:
             data.name  = "Throttle Position";
@@ -63,7 +125,7 @@ SensorData OBDDecoder::decodeLiveData(int pid, const std::string& raw) {
         case 0x0F:
             data.name  = "Intake Air Temperature";
             data.value = A - 40;
-            data.unit  = "°C";
+            data.unit  = "C";
             break;
         case 0x10:
             data.name  = "MAF Air Flow Rate";
@@ -73,6 +135,31 @@ SensorData OBDDecoder::decodeLiveData(int pid, const std::string& raw) {
         case 0x42:
             data.name  = "Battery Voltage";
             data.value = ((A * 256) + B) / 1000.0;
+            data.unit  = "V";
+            break;
+        case 0x2F:
+            data.name  = "Fuel Level";
+            data.value = (A * 100.0) / 255.0;
+            data.unit  = "%";
+            break;
+        case 0x33:
+            data.name  = "Barometric Pressure";
+            data.value = A;
+            data.unit  = "kPa";
+            break;
+        case 0x06:
+            data.name  = "Short Term Fuel Trim B1";
+            data.value = ((A - 128) * 100.0) / 128.0;
+            data.unit  = "%";
+            break;
+        case 0x07:
+            data.name  = "Long Term Fuel Trim B1";
+            data.value = ((A - 128) * 100.0) / 128.0;
+            data.unit  = "%";
+            break;
+        case 0x14:
+            data.name  = "O2 Voltage (B1 S1)";
+            data.value = A / 200.0;
             data.unit  = "V";
             break;
         default:
@@ -98,35 +185,12 @@ std::string OBDDecoder::dtcBytesToCode(uint8_t a, uint8_t b) {
     return oss.str();
 }
 
-static const std::map<std::string, std::string> DTC_DESCRIPTIONS = {
-    {"P0100", "Mass Air Flow Circuit Malfunction"},
-    {"P0101", "Mass Air Flow Circuit Range/Performance"},
-    {"P0110", "Intake Air Temperature Circuit Malfunction"},
-    {"P0115", "Engine Coolant Temperature Circuit Malfunction"},
-    {"P0120", "Throttle Position Sensor Circuit Malfunction"},
-    {"P0130", "O2 Sensor Circuit Malfunction (Bank 1, Sensor 1)"},
-    {"P0171", "System Too Lean (Bank 1)"},
-    {"P0172", "System Too Rich (Bank 1)"},
-    {"P0300", "Random/Multiple Cylinder Misfire Detected"},
-    {"P0301", "Cylinder 1 Misfire Detected"},
-    {"P0302", "Cylinder 2 Misfire Detected"},
-    {"P0303", "Cylinder 3 Misfire Detected"},
-    {"P0304", "Cylinder 4 Misfire Detected"},
-    {"P0400", "Exhaust Gas Recirculation Flow Malfunction"},
-    {"P0420", "Catalyst System Efficiency Below Threshold"},
-    {"P0440", "Evaporative Emission Control System Malfunction"},
-    {"P0500", "Vehicle Speed Sensor Malfunction"},
-    {"P0505", "Idle Control System Malfunction"},
-    {"P0600", "Serial Communication Link Malfunction"},
-};
-
 std::vector<DTC> OBDDecoder::decodeDTCs(const std::string& raw) {
     std::vector<DTC> dtcs;
     std::istringstream iss(raw);
     std::string token;
 
-    // Skip mode byte "43"
-    iss >> token;
+    iss >> token; // skip mode byte "43"
 
     std::vector<int> bytes;
     while (iss >> token)
@@ -135,39 +199,25 @@ std::vector<DTC> OBDDecoder::decodeDTCs(const std::string& raw) {
     for (size_t i = 0; i + 1 < bytes.size(); i += 2) {
         if (bytes[i] == 0 && bytes[i+1] == 0) continue;
         DTC dtc;
-        dtc.code = dtcBytesToCode(bytes[i], bytes[i+1]);
-        auto it = DTC_DESCRIPTIONS.find(dtc.code);
-        dtc.description = (it != DTC_DESCRIPTIONS.end())
-            ? it->second : "Unknown fault code";
+        dtc.code = dtcBytesToCode(static_cast<uint8_t>(bytes[i]),
+                                   static_cast<uint8_t>(bytes[i+1]));
+        auto it = dtcDatabase.find(dtc.code);
+        if (it != dtcDatabase.end()) {
+            dtc.description = it->second.first;
+            dtc.severity    = it->second.second;
+        } else {
+            dtc.description = "Unknown fault code";
+            dtc.severity    = Severity::INFO;
+        }
         dtcs.push_back(dtc);
     }
     return dtcs;
 }
 
-FreezeFrame OBDDecoder::decodeFreezeFrame(const std::string& raw) {
-    FreezeFrame ff;
-    ff.dtc = "P0300";
-
-    // Decode the same PIDs as live data for the freeze frame snapshot
-    std::vector<std::pair<int,std::string>> snapshots = {
-        {0x0C, "41 0C 1A F8"},
-        {0x0D, "41 0D 45"},
-        {0x05, "41 05 69"},
-        {0x11, "41 11 50"}
-    };
-
-    for (auto& [pid, fakeRaw] : snapshots)
-        ff.sensors.push_back(decodeLiveData(pid, fakeRaw));
-
-    return ff;
-}
-
 std::string OBDDecoder::decodeVIN(const std::string& raw) {
     std::istringstream iss(raw);
-    std::string token;
-    std::string vin;
+    std::string token, vin;
     int i = 0;
-
     while (iss >> token) {
         if (i++ < 3) continue; // skip "49 02 01"
         int c = std::stoi(token, nullptr, 16);
