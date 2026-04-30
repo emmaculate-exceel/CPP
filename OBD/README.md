@@ -1,6 +1,6 @@
 # Vehicle Diagnostic Tool
 
-A command-line OBD-II vehicle diagnostic tool written in C++17.  
+A command-line OBD-II vehicle diagnostic tool written in C++ 17.  
 Currently runs in **simulation mode** — no hardware required.  
 Real ELM327/USB adapter support can be added as a future extension.
 
@@ -41,7 +41,7 @@ OBD/
 
 ## Build & Run
 
-**Requirements:** g++ with C++17 support
+**Requirements:** g++ with C++ 17 support
 
 ```bash
 # Build
@@ -77,8 +77,8 @@ Real hardware:     [Tool] <---> [ELM327 adapter] <---> [Car ECU]
 | `01 05` | 0x05 | Coolant Temperature |
 | `01 11` | 0x11 | Throttle Position   |
 | `01 42` | 0x42 | Battery Voltage     |
-| `03 00` | —    | Read DTCs           |
-| `04 00` | —    | Clear DTCs          |
+| `03 00` | —--  | Read DTCs           |
+| `04 00` | —--  | Clear DTCs          |
 | `09 02` | 0x02 | Vehicle VIN         |
 
 ---
@@ -107,7 +107,7 @@ The tool includes descriptions for 20 standard OBD-II fault codes including:
 - `P0300` — Random/Multiple Cylinder Misfire Detected
 - `P0420` — Catalyst System Efficiency Below Threshold
 - `P0440` — Evaporative Emission Control System Malfunction
-- and more...
+- and many more...
 
 ---
 
